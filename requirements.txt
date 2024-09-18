@@ -1,0 +1,6 @@
+streamlit
+requests
+crewai
+langchain_community
+duckduckgo-search
+python-dotenv
