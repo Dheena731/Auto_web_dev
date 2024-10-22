@@ -2,7 +2,6 @@ import streamlit as st
 import os
 from dotenv import load_dotenv
 import google.generativeai as genai
-from transformers import pipeline
 import webbrowser
 
 # Load environment variables
@@ -11,10 +10,7 @@ load_dotenv()
 # Configure Google API key for prompt generation
 GOOGLE_API_KEY = os.getenv('GEMINI_API_KEY')
 genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel('gemini-pro')
-
-# Initialize code generation model (replace GPT-2 with CodeLlama or another suitable code generation model)
-code_gen_model = pipeline('text-generation', model='meta-llama/CodeLlama-7b-Instruct-hf')  # Use CodeLlama
+model = genai.GenerativeModel('gemini-1.5-flash-8b')
 
 # Initialize chat session and memory
 if "chat_session" not in st.session_state:
@@ -24,13 +20,16 @@ if "history" not in st.session_state:
     st.session_state.history = []
 
 # Step 1: User Inputs for Business Information
-st.title("Website Builder - AI Automation")
+st.title("WebGenie")
 
 business_name = st.text_input("Enter your business name:")
 niche = st.text_input("What is the niche or industry of your business?")
 theme = st.text_input("What theme would you like for the website? (e.g., Modern, Minimalistic, Colorful)")
 color_scheme = st.text_input("Preferred color scheme (e.g., blue, white):")
 layout = st.radio("Select website layout:", ["Single Page", "Multi Page"])
+
+# User query input
+user_query = st.text_area("Enter additional details about your website requirements:")
 
 # Function to store previous queries and responses in session state
 def store_in_memory(role, goal, response):
@@ -87,31 +86,10 @@ def developer_agent(design_details):
     
     return developer_response  # Pass the code to the code generation step
 
-# Button to submit input and start generating prompts
-if st.button("Generate Website"):
-    if business_name and niche and theme and color_scheme:
-        
-        # Manager initiates the flow
-        manager_agent()
-
-        # Step 1: Designer creates the layout
-        design_details = designer_agent()
-
-        # Step 2: Developer implements the design
-        code_details = developer_agent(design_details)
-
-        # Step 3: Prompt Engineer generates optimized prompts
-        prompt_engineer_goal = f"Generate concise and accurate prompts for building a website for {business_name} in the {niche} niche, using a {theme} theme with a {color_scheme} color scheme."
-        p_e_backstory = "Specialized in creating efficient prompts for code generation in web development."
-        p_e_prompt = generate_prompt("Prompt Engineer", prompt_engineer_goal, p_e_backstory)
-        
-        # Get prompt engineering response
-        prompt_engineer_response = st.session_state.chat_session.send_message(p_e_prompt)
-        st.write("Prompt Engineer Response:", prompt_engineer_response)
-        store_in_memory("Prompt Engineer", prompt_engineer_goal, prompt_engineer_response)
-
-        # Step 4: Code Generation using CodeLlama
-        code_generation_goal = f"""
+# Function for generating website code using Gemini API
+def generate_website_code():
+    # Prepare the code generation goal prompt
+    code_generation_goal = f"""
 Generate the HTML, CSS, and JavaScript code to create a fully responsive and visually appealing website for a business called {business_name} in the {niche} industry.
 The website should have the following structure and features:
 1. **Header**:
@@ -145,64 +123,52 @@ The website should have the following structure and features:
    - A smooth scrolling effect for navigation links.
    - Form validation for the contact form.
    - A mobile-friendly hamburger menu for the navigation bar on smaller screens.
+
+   ### Please generate only the code with no additional text or explanations.
+   ### please generate the css and javascript codes without missing them its mandatory
+   ### Inline the CSS and JavaScript into the generated HTML.
 """
 
-        code_prompt = f"""
-Generate the complete HTML, CSS, and JavaScript code for a responsive website for "{business_name}", a business in the {niche} industry.
-The website must follow this structure:
-1. A **Header** with the business name, a navigation bar (links to Home, About, Services, and Contact Us), and a mobile-friendly hamburger menu.
-2. A **Hero Section** with a headline, background image, and a call-to-action button.
-3. An **About Section** with text and images explaining the business.
-4. A **Services Section** with a grid of services (with icons or images and short descriptions).
-5. A **Contact Us Section** with a contact form and the business’s contact details.
-6. A **Footer** with social media links and copyright information.
+    # Call Gemini API to generate the code
+    code_response = model.generate_content(code_generation_goal)
+    generated_text = code_response._result.candidates[0].content.parts[0].text
 
-**Design Details**:
-- Use the {theme} theme with a {color_scheme} color palette.
-- Make the layout fully responsive for different devices (mobile, tablet, desktop).
-- Ensure clean, professional typography and padding/margins for good readability.
-- Add hover effects for navigation links and buttons.
-- Include CSS animations for smooth scrolling and transitions.
+    # Display the generated code in the app
+    st.write("Generated Code:", generated_text)
 
-**JavaScript**:
-- Smooth scrolling for navigation links.
-- Validate the contact form fields (e.g., ensure email is in a valid format).
-- Implement the hamburger menu for mobile navigation.
+    # Store in memory
+    store_in_memory("Code Generator", code_generation_goal, generated_text)
 
-The website must have clean and modular HTML and CSS, ensuring it is readable and maintainable. 
-"""
+    # Create a single HTML file with the generated code directly
+    complete_html = generated_text  # Use the entire generated code directly
 
+    # Save the complete HTML file
+    with open("index.html", "w") as html_file:
+        html_file.write(complete_html)
 
-        # Get code generation response using CodeLlama
-        code_response = code_gen_model(code_prompt, max_length=2000, num_return_sequences=1, truncation=True)[0]['generated_text']
-        st.write("Generated Code:", code_response)
-        store_in_memory("Code Generator", code_generation_goal, code_response)
+    st.success("Website code saved to 'index.html'.")
 
-        # Split the generated code into HTML, CSS, and JS
-        html_code = code_response.split("<style>")[0]  # Everything before <style> is HTML
-        css_code = code_response.split("<style>")[1].split("</style>")[0]  # CSS between <style> tags
-        js_code = code_response.split("<script>")[1].split("</script>")[0]  # JS between <script> tags
+    # Button to preview the website
+    if st.button("Preview Website"):
+        # Open the local HTML file in a browser
+        webbrowser.open("index.html")
+        st.markdown(f"<a href='index.html' target='_blank'>Click here to view your website!</a>", unsafe_allow_html=True)
 
-        # Save HTML, CSS, and JS files
-        with open("index.html", "w") as html_file:
-            html_file.write(html_code)
-        with open("style.css", "w") as css_file:
-            css_file.write(css_code)
-        with open("script.js", "w") as js_file:
-            js_file.write(js_code)
+# Button to submit input and start generating prompts
+if st.button("Generate Website"):
+    if business_name and niche and theme and color_scheme and user_query:
+        
+        # Manager initiates the flow
+        manager_agent()
 
-        st.success("Website code saved to 'index.html', 'style.css', and 'script.js'.")
+        # Step 1: Designer creates the layout
+        design_details = designer_agent()
 
-        # Ensure HTML file correctly links to CSS and JS
-        with open("index.html", "a") as html_file:
-            html_file.write('\n<link rel="stylesheet" href="style.css">\n')
-            html_file.write('<script src="script.js"></script>\n')
+        # Step 2: Developer implements the design
+        code_details = developer_agent(design_details)
 
-        # Button to preview the website
-        if st.button("Preview Website"):
-            # Open the local HTML file in a browser
-            webbrowser.open("index.html")
-            st.markdown(f"<a href='index.html' target='_blank'>Click here to view your website!</a>", unsafe_allow_html=True)
+        # Step 3: Generate the website code using Gemini API
+        generate_website_code()
 
     else:
         st.error("Please fill in all the fields.")

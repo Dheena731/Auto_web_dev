@@ -16,8 +16,6 @@ model=genai.GenerativeModel('gemini-pro')
 CODELLAMA_API_URL = "https://api-inference.huggingface.co/models/meta-llama/Llama-2-7b-hf"  # Replace with the actual URL for CodeLlama model
 HEADERS = {"Authorization": f"Bearer {os.getenv('API_KEY')}"}
 
-chat_
-
 def generate_detailed_prompt(user_query):
     """Generate a detailed prompt using the Gemini model."""
     response = llm.generate(prompt=user_query)
