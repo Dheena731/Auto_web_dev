@@ -1,7 +1,5 @@
 streamlit
 requests
-crewai
-langchain_community
 duckduckgo-search
 python-dotenv
 langchain_google_genai
